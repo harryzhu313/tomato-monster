@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Tomato Monster · 按时停下来",
+  "version": "0.1.0",
+  "description": "解决番茄钟最大的问题：时间到了，却停不下来。",
+  "permissions": ["storage", "alarms", "notifications", "scripting", "tabs", "offscreen"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "番茄钟",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["backgrounds/*.svg", "themes/monster/*.svg"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

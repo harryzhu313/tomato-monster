@@ -1,0 +1,152 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 280px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  background: #fafaf7;
+  color: #2a2a2a;
+}
+
+.container {
+  padding: 24px 20px 20px;
+  text-align: center;
+}
+
+.monster {
+  width: 88px;
+  height: 100px;
+  display: none;
+  margin: 0 auto 6px;
+  user-select: none;
+  pointer-events: none;
+}
+
+body.theme-monster .monster[src] {
+  display: block;
+}
+
+.phase-label {
+  font-size: 13px;
+  color: #888;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.phase-label.focusing { color: #d94f3a; }
+.phase-label.breaking { color: #4a8a5c; }
+.phase-label.paused   { color: #b08a3e; }
+
+.timer {
+  font-size: 56px;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+  color: #1a1a1a;
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+  font-family: inherit;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #d94f3a;
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #c24330;
+}
+
+.btn-secondary {
+  background: #ececec;
+  color: #333;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #dcdcdc;
+}
+
+.quota {
+  font-size: 11px;
+  color: #8a8a85;
+  text-align: center;
+  padding: 6px 0 2px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.5px;
+}
+
+.quota.exhausted {
+  color: #b08a3e;
+}
+
+.bg-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0 4px;
+  font-size: 11px;
+  color: #8a8a85;
+}
+
+.bg-picker label {
+  letter-spacing: 0.5px;
+}
+
+.bg-picker select {
+  flex: 1;
+  max-width: 140px;
+  padding: 4px 6px;
+  font-size: 11px;
+  border: 1px solid #dcdcd8;
+  border-radius: 4px;
+  background: white;
+  color: #333;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  padding: 6px;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: #555;
+}
+
+.hint {
+  font-size: 11px;
+  color: #aaa;
+  line-height: 1.5;
+  margin-top: 8px;
+}
