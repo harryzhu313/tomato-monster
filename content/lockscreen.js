@@ -397,7 +397,7 @@
       $angryMonster.hidden = false;
       $monsterShout.hidden = false;
       $phaseLabel.hidden = true;
-      $subtitle.textContent = '坐了这么久，你的眼睛和脖子都不高兴了。';
+      $subtitle.textContent = pickMonsterSubtitle();
     } else {
       $angryMonster.hidden = true;
       $monsterShout.hidden = true;
@@ -413,6 +413,22 @@
   // 它也能完成自己的动画。destroy() 里会扫一遍 .__tomato-afraid 清理残留。
 
   const AFRAID_PHRASES = ['确定吗？', 'you sure?'];
+
+  // 小怪兽主题下的副标题文案池。每次锁屏弹出时随机挑一句。
+  const MONSTER_SUBTITLES = [
+    '坐了这么久，你的眼睛和脖子都不高兴了。',
+    '屏幕看够了，眼睛在小声求你眨一眨。',
+    '你的腰在偷偷抗议，先站起来走两步吧。',
+    '肩膀已经硬得像块砖，该活动一下了。',
+    '盯这么久，眼睛快要罢工啦。',
+    '脖子想回到它本来的角度，让它歇会儿。',
+    '站起来，活动一下吧。',
+    '你的手腕也需要一点自由时间。'
+  ];
+
+  function pickMonsterSubtitle() {
+    return MONSTER_SUBTITLES[Math.floor(Math.random() * MONSTER_SUBTITLES.length)];
+  }
 
   function bindAfraidHover(button) {
     let group = null;
