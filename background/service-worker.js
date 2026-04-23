@@ -20,7 +20,10 @@ const SETTINGS_KEY = 'settings';
 const STATS_KEY = 'stats';
 const TASKS_KEY = 'tasksToday';
 const ARCHIVE_KEY = 'tasksArchive';
+const BADGES_KEY = 'badgesState';
 const LOCKSCREEN_FILE = 'content/lockscreen.js';
+const CELEBRATION_FILE = 'content/celebration.js';
+const STREAK_GOAL = 7;
 
 const DEFAULT_SETTINGS = {
   lockscreenBg: 'transparent',
@@ -333,7 +336,8 @@ async function mutateTodayStats(mutate) {
   const entry = normalizeStatEntry(stats[t]);
   mutate(entry);
   stats[t] = entry;
-  const cutoff = dateNDaysAgoStr(30);
+  // 保留 366 天，供热力图展示整年
+  const cutoff = dateNDaysAgoStr(366);
   for (const k of Object.keys(stats)) {
     if (k < cutoff) delete stats[k];
   }
@@ -421,6 +425,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     await sendToOffscreen('stop-white-noise');
     await sleep(500);
     await playChimeIfEnabled();
+    // 本次休息完整完成，计入连续休息天数。命中 7 天里程碑时返回 true。
+    const milestone = await recordBreakCompletion();
     await sleep(1000);
     const settings = await getSettings();
     if (settings.autoStartNextFocus) {
@@ -430,8 +436,83 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await notify('break-done', '休息结束', '准备好就开始下一番茄。');
       await reset();
     }
+    if (milestone) {
+      // 庆祝覆盖层在状态切换之后注入，避免被锁屏销毁流程刷掉
+      await injectCelebrationIntoAllTabs();
+    }
   }
 });
+
+// —— 徽章：连续按时休息 7 天解锁一枚 ——
+// breakStreak = { lastBreakDate, currentStreak } · badges = 累计数
+// 同一天多次完成休息只算一天；中断一天就重置为 1。
+
+async function getBadgesState() {
+  const data = await chrome.storage.local.get(BADGES_KEY);
+  const raw = data[BADGES_KEY] || {};
+  return {
+    badges: Number(raw.badges) || 0,
+    currentStreak: Number(raw.currentStreak) || 0,
+    lastBreakDate: raw.lastBreakDate || null,
+    unlockedDates: Array.isArray(raw.unlockedDates) ? raw.unlockedDates : [],
+    goal: STREAK_GOAL
+  };
+}
+
+function yesterdayStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 返回是否触发里程碑（集齐 7 天，刚发了一枚新徽章）
+async function recordBreakCompletion() {
+  const today = todayStr();
+  const yesterday = yesterdayStr();
+  const state = await getBadgesState();
+
+  if (state.lastBreakDate === today) return false; // 今天已经计过
+
+  let nextStreak;
+  if (state.lastBreakDate === yesterday) {
+    nextStreak = state.currentStreak + 1;
+  } else {
+    nextStreak = 1;
+  }
+
+  let nextBadges = state.badges;
+  let nextUnlocked = state.unlockedDates.slice();
+  let milestone = false;
+  if (nextStreak >= STREAK_GOAL) {
+    nextBadges += 1;
+    nextStreak = 0;
+    nextUnlocked.push(today);
+    milestone = true;
+  }
+
+  await chrome.storage.local.set({
+    [BADGES_KEY]: {
+      badges: nextBadges,
+      currentStreak: nextStreak,
+      lastBreakDate: today,
+      unlockedDates: nextUnlocked
+    }
+  });
+  return milestone;
+}
+
+async function injectCelebrationIntoAllTabs() {
+  const tabs = await chrome.tabs.query({});
+  const targets = tabs.filter((t) => t.id != null && canInject(t.url));
+  await Promise.all(targets.map(async (t) => {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: t.id, allFrames: false },
+        files: [CELEBRATION_FILE]
+      });
+    } catch { /* 受限页面忽略 */ }
+  }));
+}
 
 // —— Notion 导出 ——
 //
@@ -647,6 +728,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return;
         case 'GET_STATS':
           sendResponse(await getLast7DaysStats());
+          return;
+        case 'GET_BADGES':
+          sendResponse(await getBadgesState());
           return;
         case 'GET_NOTION_CONFIG':
           sendResponse(await getNotionConfig());

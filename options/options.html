@@ -12,6 +12,47 @@
       <p class="subtitle">所有配置都在这里。改完自动生效。</p>
     </header>
 
+    <section class="card badges-card">
+      <div class="badges-head">
+        <h2>🏅 7 天连击</h2>
+        <div class="badges-head-meta">
+          <span class="badges-count-inline">
+            <span id="badges-count">0</span>
+            <span class="badges-count-unit">/ 52</span>
+          </span>
+          <span class="badges-sep">·</span>
+          <span class="badges-streak-inline">
+            本周连击 <span id="badges-streak">0</span>/7 天
+          </span>
+        </div>
+      </div>
+      <div class="badges-slots" id="badges-slots"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>🟩 最近一年</h2>
+        <span class="heatmap-meta" id="heatmap-meta"></span>
+      </div>
+      <div class="heatmap-wrap">
+        <div class="heatmap-months" id="heatmap-months" aria-hidden="true"></div>
+        <div class="heatmap-body">
+          <div class="heatmap-dows" aria-hidden="true">
+            <span></span><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span>
+          </div>
+          <div class="heatmap-grid" id="heatmap-grid"></div>
+        </div>
+        <div class="heatmap-legend">
+          <span>少</span>
+          <i class="heatmap-cell lv-0"></i>
+          <i class="heatmap-cell lv-1"></i>
+          <i class="heatmap-cell lv-2"></i>
+          <i class="heatmap-cell lv-3"></i>
+          <span>多</span>
+        </div>
+      </div>
+    </section>
+
     <section class="card">
       <div class="card-header">
         <h2>📊 最近 7 天</h2>

@@ -27,7 +27,13 @@ const els = {
   notionTaskDb: document.getElementById('notion-task-db'),
   notionDayDb: document.getElementById('notion-day-db'),
   notionStatus: document.getElementById('notion-status'),
-  btnNotionTest: document.getElementById('btn-notion-test')
+  btnNotionTest: document.getElementById('btn-notion-test'),
+  badgesCount: document.getElementById('badges-count'),
+  badgesStreak: document.getElementById('badges-streak'),
+  badgesSlots: document.getElementById('badges-slots'),
+  heatmapGrid: document.getElementById('heatmap-grid'),
+  heatmapMonths: document.getElementById('heatmap-months'),
+  heatmapMeta: document.getElementById('heatmap-meta')
 };
 
 async function loadSettings() {
@@ -106,6 +112,127 @@ function computeStreaks(days) {
   }
 
   return { current, longest, total };
+}
+
+// —— 一年热力图 ——
+// 布局：53 周 × 7 天，每列一周，从一年前的周日开始到今天。
+// 颜色：0 白；1-6 浅绿；7-12 绿；13+ 深绿。
+// 数据：直接读 chrome.storage.local 的 stats（SW 已保留 366 天）。
+
+function heatmapLevel(count) {
+  if (count <= 0) return 0;
+  if (count <= 6) return 1;
+  if (count <= 12) return 2;
+  return 3;
+}
+
+function isoDateOf(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function refreshHeatmap() {
+  const data = await chrome.storage.local.get(STATS_KEY);
+  const stats = data[STATS_KEY] || {};
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 网格终点 = 本周周六（补齐当前列），起点 = 52 周前的周日
+  const end = new Date(today);
+  end.setDate(end.getDate() + (6 - end.getDay())); // 周六
+  const start = new Date(end);
+  start.setDate(start.getDate() - (53 * 7 - 1)); // 53 列 × 7 天
+
+  const cells = [];
+  const monthMarks = []; // { col, label } 每月第一列打一个月份
+  let lastMonth = -1;
+  let totalPomodoros = 0;
+  let activeDays = 0;
+
+  for (let col = 0; col < 53; col++) {
+    for (let row = 0; row < 7; row++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + col * 7 + row);
+      const iso = isoDateOf(d);
+      const entry = stats[iso];
+      const count = typeof entry === 'number'
+        ? entry
+        : (entry && typeof entry === 'object' ? Number(entry.completed) || 0 : 0);
+      const future = d > today;
+      cells.push({ col, row, date: iso, count, future });
+      if (!future && count > 0) {
+        totalPomodoros += count;
+        activeDays += 1;
+      }
+    }
+    // 这一列的周日作为月份判定
+    const colStart = new Date(start);
+    colStart.setDate(start.getDate() + col * 7);
+    const m = colStart.getMonth();
+    if (m !== lastMonth) {
+      monthMarks.push({ col, label: `${m + 1}月` });
+      lastMonth = m;
+    }
+  }
+
+  // —— 渲染格子 ——
+  els.heatmapGrid.innerHTML = cells.map((c) => {
+    if (c.future) {
+      return `<i class="heatmap-cell is-future" style="grid-column:${c.col + 1};grid-row:${c.row + 1};"></i>`;
+    }
+    const lv = heatmapLevel(c.count);
+    const title = c.count === 0 ? `${c.date}：没有番茄` : `${c.date}：${c.count} 🍅`;
+    return `<i class="heatmap-cell lv-${lv}" style="grid-column:${c.col + 1};grid-row:${c.row + 1};" title="${title}"></i>`;
+  }).join('');
+
+  // —— 渲染月份标签 ——
+  els.heatmapMonths.innerHTML = monthMarks
+    .map((m) => `<span style="grid-column:${m.col + 1};">${m.label}</span>`)
+    .join('');
+
+  els.heatmapMeta.textContent = `累计 ${totalPomodoros} 颗 · ${activeDays} 个活跃日`;
+}
+
+// 52 个 love monster 轮廓，对应一年 52 周里可能解锁的徽章。
+// 过去 365 天内每完成一次 7 天连击，就点亮一个；超过 52 的不展示但计数保留。
+const BADGES_SLOT_TOTAL = 52;
+const LOVE_MONSTER_URL = '../themes/monster/love.svg';
+
+function countUnlockedThisYear(unlockedDates) {
+  if (!Array.isArray(unlockedDates)) return 0;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 365);
+  const cutoffIso = isoDateOf(cutoff);
+  let n = 0;
+  for (const d of unlockedDates) if (d >= cutoffIso) n++;
+  return n;
+}
+
+function renderBadgeSlots(unlockedThisYear) {
+  const filled = Math.min(BADGES_SLOT_TOTAL, unlockedThisYear);
+  const parts = [];
+  for (let i = 0; i < BADGES_SLOT_TOTAL; i++) {
+    const on = i < filled;
+    const cls = 'badge-slot' + (on ? ' is-on' : '');
+    const title = on ? `第 ${i + 1} 枚 · 已解锁` : `第 ${i + 1} 枚 · 未解锁`;
+    parts.push(`<span class="${cls}" title="${title}"><img src="${LOVE_MONSTER_URL}" alt="" /></span>`);
+  }
+  els.badgesSlots.innerHTML = parts.join('');
+}
+
+async function refreshBadges() {
+  try {
+    const b = await chrome.runtime.sendMessage({ type: 'GET_BADGES' });
+    if (!b || b.error) return;
+    const goal = Number(b.goal) || 7;
+    const cur = Math.max(0, Math.min(goal, Number(b.currentStreak) || 0));
+    const unlockedThisYear = countUnlockedThisYear(b.unlockedDates);
+    els.badgesCount.textContent = unlockedThisYear;
+    els.badgesStreak.textContent = cur;
+    renderBadgeSlots(unlockedThisYear);
+  } catch (e) {
+    setTimeout(refreshBadges, 200);
+  }
 }
 
 async function refreshStats() {
@@ -484,13 +611,19 @@ els.btnNotionTest.addEventListener('click', testNotionConnection);
 // 如果番茄在别处完成（锁屏里的延长等也会触发 stats 变化），实时刷新图表
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.stats) refreshStats();
+  if (changes.stats) {
+    refreshStats();
+    refreshHeatmap();
+  }
   if (changes[TASKS_KEY] || changes[ARCHIVE_KEY] || changes.stats || changes.notionExportLog) refreshHistory();
+  if (changes.badgesState) refreshBadges();
 });
 
 (async () => {
   renderSettings(await loadSettings());
   await loadNotionConfig();
+  await refreshHeatmap();
   await refreshStats();
+  await refreshBadges();
   await refreshHistory();
 })();
