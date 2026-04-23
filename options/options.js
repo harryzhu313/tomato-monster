@@ -5,12 +5,16 @@ const DEFAULT_SETTINGS = {
   whiteNoiseEnabled: true,
   chimeEnabled: true,
   notificationPersistent: true,
+  dailyReminderEnabled: true,
+  dailyReminderTime: '21:00',
   theme: 'default'
 };
 
 const els = {
   chime: document.getElementById('chime'),
   persistent: document.getElementById('persistent'),
+  dailyReminder: document.getElementById('daily-reminder'),
+  dailyReminderTime: document.getElementById('daily-reminder-time'),
   themeSelect: document.getElementById('theme-select'),
   bgSelect: document.getElementById('bg-select'),
   autoStart: document.getElementById('auto-start'),
@@ -51,6 +55,9 @@ async function patchSettings(patch) {
 function renderSettings(settings) {
   els.chime.checked = !!settings.chimeEnabled;
   els.persistent.checked = !!settings.notificationPersistent;
+  els.dailyReminder.checked = !!settings.dailyReminderEnabled;
+  els.dailyReminderTime.value = settings.dailyReminderTime || '21:00';
+  els.dailyReminderTime.disabled = !settings.dailyReminderEnabled;
   els.themeSelect.value = settings.theme;
   els.bgSelect.value = settings.lockscreenBg;
   els.autoStart.checked = !!settings.autoStartNextFocus;
@@ -257,6 +264,13 @@ els.chime.addEventListener('change', () =>
 );
 els.persistent.addEventListener('change', () =>
   patchSettings({ notificationPersistent: els.persistent.checked })
+);
+els.dailyReminder.addEventListener('change', async () => {
+  els.dailyReminderTime.disabled = !els.dailyReminder.checked;
+  await patchSettings({ dailyReminderEnabled: els.dailyReminder.checked });
+});
+els.dailyReminderTime.addEventListener('change', () =>
+  patchSettings({ dailyReminderTime: els.dailyReminderTime.value || '21:00' })
 );
 els.themeSelect.addEventListener('change', () =>
   patchSettings({ theme: els.themeSelect.value })

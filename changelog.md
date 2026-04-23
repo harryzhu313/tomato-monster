@@ -13,5 +13,4 @@ chrome.storage.local.get('stats').then(d => {
 日末自动提醒
 通知常驻直到点掉是什么
 7 天奖励 monster love
-修改 popup 的宽度
-字体、间距、换行等问题
+修改 popup 的宽度、字体、间距、换行等问题
