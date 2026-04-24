@@ -2,7 +2,7 @@
   <img src="themes/monster/happy.svg" width="140" alt="Monster pomodoro" />
 </p>
 
-<h1 align="center">Tomato Monster · 按时停下来</h1>
+<h1 align="center">Monster pomodoro · 按时停下来</h1>
 
 <p align="center">解决番茄钟最大的问题：时间到了，却停不下来。</p>
 
