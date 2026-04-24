@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="themes/monster/happy.svg" width="140" alt="Tomato Monster" />
+  <img src="themes/monster/happy.svg" width="140" alt="Monster pomodoro" />
 </p>
 
 <h1 align="center">Tomato Monster · 按时停下来</h1>
