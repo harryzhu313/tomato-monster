@@ -32,6 +32,7 @@ const LAST_MINUTE_SCHEDULE_KEY = 'lastMinutePromptSchedule';
 const LAST_MINUTE_MS = TEST_MODE ? 5 * 1000 : 60 * 1000;
 const BADGE_TICK_MINUTES = TEST_MODE ? 0.5 : 1;
 const PHASE_END_STALE_MS = 10 * 1000;
+const LOVE_CELEBRATION_REINJECT_MS = 15 * 1000;
 
 const DEFAULT_SETTINGS = {
   lockscreenBg: 'transparent',
@@ -110,7 +111,8 @@ const DEFAULT_STATE = {
   endTime: null,           // 当前阶段结束时的 Date.now() 时间戳
   pausedRemaining: null,   // 暂停时剩余毫秒
   prePauseState: null,     // 暂停前的状态，用于恢复
-  focusStartedAt: null     // 本次专注的启动时间戳；启动后 10 秒内的放弃不计入烂番茄（手动/自动/延长 同等待遇）
+  focusStartedAt: null,    // 本次专注的启动时间戳；启动后 10 秒内的放弃不计入烂番茄（手动/自动/延长 同等待遇）
+  loveMonsterUntil: null   // 命中 7 天奖励时，休息开始后一小段时间内补注入 love monster
 };
 
 const FOCUS_START_GRACE_MS = 10 * 1000;
@@ -394,8 +396,7 @@ async function handlePhaseEnd() {
       await sendToOffscreen('stop-white-noise');
       await sleep(120);
       await playChimeIfEnabled();
-      // 本次休息完整完成，计入连续休息天数。命中 7 天里程碑时返回 true。
-      const milestone = await recordBreakCompletion();
+      await ensureBadgesAnchor();
       await sleep(1000);
       const settings = await getSettings();
       if (settings.autoStartNextFocus) {
@@ -404,10 +405,6 @@ async function handlePhaseEnd() {
       } else {
         await notify('break-done', '休息结束', '准备好就开始下一番茄。');
         await reset({ force: true });
-      }
-      if (milestone) {
-        // 庆祝覆盖层在状态切换之后注入，避免被锁屏销毁流程刷掉
-        await injectCelebrationIntoAllTabs();
       }
     }
   } catch (e) {
@@ -479,19 +476,23 @@ async function startBreak(kind = 'short') {
   const normalizedKind = kind === 'long' ? 'long' : 'short';
   const duration = getBreakDurationMs(normalizedKind, settings);
   const endTime = Date.now() + duration;
-  await setState({
+  const milestone = await recordBreakEntryMilestone();
+  const nextState = {
     state: 'BREAKING',
     phase: 'break',
     breakKind: normalizedKind,
     endTime,
     pausedRemaining: null,
-    prePauseState: null
-  });
+    prePauseState: null,
+    focusStartedAt: null,
+    loveMonsterUntil: milestone ? Date.now() + LOVE_CELEBRATION_REINJECT_MS : null
+  };
+  await setState(nextState);
   await chrome.alarms.create(ALARM_NAME, { when: endTime });
   // 进入休息：向所有已有标签页注入锁屏。锁屏本身就是最强的"停下来"信号，
   // 不再发"专注结束"的系统通知。仅当没有任何 tab 能被注入（例如用户所有
   // 窗口都停在 chrome:// 等受限页面）时，通知才作为兜底。
-  const injected = await injectLockscreenIntoAllTabs();
+  const injected = await injectLockscreenIntoAllTabs(nextState);
   if (injected === 0) {
     await notify(
       'break-fallback',
@@ -534,11 +535,38 @@ async function injectIntoTab(tabId) {
   }
 }
 
+function shouldInjectLoveCelebration(state) {
+  return state?.state === 'BREAKING'
+    && Number(state.loveMonsterUntil) > Date.now();
+}
+
+async function injectCelebrationIntoTab(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: [CELEBRATION_FILE]
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function injectBreakOverlaysIntoTab(tabId, state) {
+  const locked = await injectIntoTab(tabId);
+  if (locked && shouldInjectLoveCelebration(state)) {
+    // 锁屏先注入，love monster 后注入，确保第 7 天奖励显示在锁屏之上。
+    await injectCelebrationIntoTab(tabId);
+  }
+  return locked;
+}
+
 // 返回成功注入的 tab 数量，供调用方决定是否需要通知兜底
-async function injectLockscreenIntoAllTabs() {
+async function injectLockscreenIntoAllTabs(stateForCelebration = null) {
+  const state = stateForCelebration || await getState();
   const tabs = await chrome.tabs.query({});
   const targets = tabs.filter((t) => t.id != null && canInject(t.url));
-  const results = await Promise.all(targets.map((t) => injectIntoTab(t.id)));
+  const results = await Promise.all(targets.map((t) => injectBreakOverlaysIntoTab(t.id, state)));
   return results.filter(Boolean).length;
 }
 
@@ -748,7 +776,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   await handlePhaseEnd();
 });
 
-// —— 徽章：连续 7 天没碰过"延长时间"解锁一枚 ——
+// —— 徽章：连续 7 天没碰过"延长时间"，第 7 天第一个番茄进入休息时解锁一枚 ——
 // badgesState = { badges, unlockedDates, lastExtendDate, anchorDate }
 // 干净日 = 当天 quotaState.used === 0（一次延长都没用）。
 // 连击 = 从起算日（anchor）或最近一次延长日/解锁日之后，到今天的连续干净天数。
@@ -815,8 +843,10 @@ function computeStreak(raw, today, quotaUsed, todayCompleted) {
   return Math.max(0, Math.min(diff, STREAK_GOAL));
 }
 
-// 达标则颁发徽章：mutate raw 并返回 true
-function maybeAward(raw, today, quotaUsed, todayCompleted) {
+// 达标则颁发徽章：mutate raw 并返回 true。
+// requireFirstTomatoToday 用于把 love monster 固定到"第 7 天第一个番茄进入休息"这个时刻。
+function maybeAward(raw, today, quotaUsed, todayCompleted, { requireFirstTomatoToday = false } = {}) {
+  if (requireFirstTomatoToday && todayCompleted !== 1) return false;
   const streak = computeStreak(raw, today, quotaUsed, todayCompleted);
   if (streak >= STREAK_GOAL && quotaUsed === 0 && !raw.unlockedDates.includes(today)) {
     raw.badges += 1;
@@ -831,13 +861,7 @@ async function getBadgesState() {
   const today = todayStr();
   const quota = await getQuota();
   const todayCompleted = await getTodayCompleted();
-  const awarded = maybeAward(raw, today, quota.used, todayCompleted);
-  if (awarded || raw.anchorInitialized) await saveBadgesRaw(raw);
-  if (awarded) {
-    // 满 7 天即解锁：往所有标签注入庆祝动画 + 系统通知，保证用户看到
-    injectCelebrationIntoAllTabs().catch((e) => console.error('celebrate inject failed', e));
-    notify('badge-unlock', '🎉 解锁一枚 Love Monster', '7 天没碰过延长，给自己点个赞。').catch(() => {});
-  }
+  if (raw.anchorInitialized) await saveBadgesRaw(raw);
   const streak = computeStreak(raw, today, quota.used, todayCompleted);
   return {
     badges: raw.badges,
@@ -859,28 +883,20 @@ async function markExtendUsedToday(today) {
   await saveBadgesRaw(raw);
 }
 
-// 返回是否触发里程碑（满 7 干净天，刚发了一枚新徽章）
-async function recordBreakCompletion() {
+// 专注结束已经写入 todayCompleted；如果这是第 7 天第一个番茄，进入休息时立即触发 love monster。
+async function recordBreakEntryMilestone() {
   const raw = await loadBadgesRaw();
   const today = todayStr();
   const quota = await getQuota();
   const todayCompleted = await getTodayCompleted();
-  const awarded = maybeAward(raw, today, quota.used, todayCompleted);
+  const awarded = maybeAward(raw, today, quota.used, todayCompleted, { requireFirstTomatoToday: true });
   if (awarded || raw.anchorInitialized) await saveBadgesRaw(raw);
   return awarded;
 }
 
-async function injectCelebrationIntoAllTabs() {
-  const tabs = await chrome.tabs.query({});
-  const targets = tabs.filter((t) => t.id != null && canInject(t.url));
-  await Promise.all(targets.map(async (t) => {
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: t.id, allFrames: false },
-        files: [CELEBRATION_FILE]
-      });
-    } catch { /* 受限页面忽略 */ }
-  }));
+async function ensureBadgesAnchor() {
+  const raw = await loadBadgesRaw();
+  if (raw.anchorInitialized) await saveBadgesRaw(raw);
 }
 
 // —— Notion 导出 ——
@@ -1212,7 +1228,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const s = await getState();
   if (s.state !== 'BREAKING') return;
   if (!canInject(tab.url)) return;
-  injectIntoTab(tabId);
+  injectBreakOverlaysIntoTab(tabId, s);
 });
 
 // 悬浮窗被关闭时清理 window id，防止下次点击「悬浮」时 update 报错
@@ -1228,7 +1244,7 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   if (s.state !== 'BREAKING') return;
   try {
     const tab = await chrome.tabs.get(tabId);
-    if (canInject(tab.url)) injectIntoTab(tabId);
+    if (canInject(tab.url)) injectBreakOverlaysIntoTab(tabId, s);
   } catch {
     // tab 可能已关闭
   }

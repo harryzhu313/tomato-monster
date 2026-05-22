@@ -1,12 +1,12 @@
 // 7 天连续按时休息的庆祝全屏覆盖层。
-// 由 Service Worker 在休息结束后、命中里程碑时注入。
+// 由 Service Worker 在第 7 天第一个番茄进入休息时注入。
 //
 // 设计要点：
 // 1. Shadow DOM 隔离，不被页面 CSS 污染。
 // 2. Love monster 尺寸占屏幕高度 ~70%，居中，带脉冲心跳动画。
 // 3. 飘散的小爱心做背景装饰。
-// 4. 点击任意处关闭；若无交互 6 秒后自动淡出。
-// 5. 只读展示，不阻塞扩展其他流程（下一番茄照常自动启动）。
+// 4. 点击任意处关闭；若无交互 10 秒后自动淡出。
+// 5. 只读展示，不阻塞休息锁屏。
 
 (() => {
   if (window.__tomatoLoveInjected) return;
@@ -121,12 +121,12 @@
     <div class="overlay" id="overlay">
       <div class="hearts" id="hearts"></div>
       <div class="banner">ACHIEVEMENT UNLOCKED</div>
-      <div class="title">🏅 徽章解锁 ·love monster</div>
-      <div class="subtitle">连续 7 天都按时休息，做得好！</div>
+      <div class="title">🏅 Love Monster 出现了</div>
+      <div class="subtitle">第 7 天的第一个番茄完成了。现在去休息。</div>
       <div class="monster-stage">
         <img class="monster" src="${LOVE_URL}" alt="love monster" />
       </div>
-      <div class="hint">点击任意处关闭 · 6 秒后自动消失</div>
+      <div class="hint">点击任意处关闭 · 10 秒后自动消失</div>
     </div>
   `;
 
@@ -169,5 +169,5 @@
     if (e.key === 'Escape') close();
   }, { once: true });
 
-  setTimeout(close, 6000);
+  setTimeout(close, 10000);
 })();

@@ -613,7 +613,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   renderTasks();
 
   await refreshStats();
-  // 触发徽章评估：满 7 天没碰过延长，开 popup 即颁奖（SW 内做庆祝注入 + 通知）
+  // 同步徽章状态；love monster 只在第 7 天第一个番茄进入休息时触发。
   chrome.runtime.sendMessage({ type: 'GET_BADGES' }).catch(() => {});
 })();
 
